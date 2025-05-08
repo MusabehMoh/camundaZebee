@@ -11,7 +11,7 @@ const TaskList = () => {
   const fetchTasks = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('http://localhost:3001/api/tasks');
+      const response = await axios.get('http://localhost:3002/api/tasks');
       setTasks(response.data);
       setError(null);
     } catch (error) {
@@ -34,16 +34,17 @@ const TaskList = () => {
   }, []);
 
   // Handle task approval or rejection
-  const handleDecision = async (jobKey, approved) => {
+  const handleDecision = async (jobKey, approved, role) => {
     try {
-      await axios.post('http://localhost:3001/api/complete', {
+      await axios.post('http://localhost:3002/api/complete', {
         jobKey,
-        approved
+        approved,
+        role
       });
       
       setMessage({
         type: 'success',
-        text: `Task ${approved ? 'approved' : 'rejected'} successfully!`
+        text: `Task ${approved ? 'approved' : 'rejected'} by ${role || 'reviewer'} successfully!`
       });
       
       // Remove the completed task from the list
@@ -86,22 +87,23 @@ const TaskList = () => {
       
       {tasks.map((task) => (
         <div key={task.jobKey} className="task-card">
-          <h3>Leave Request</h3>
+          <h3>{task.role === 'manager' ? 'Manager Approval' : (task.role === 'hr' ? 'HR Approval' : 'Leave Request')}</h3>
           <p><strong>Requester:</strong> {task.variables.requester || 'Anonymous'}</p>
           <p><strong>Reason:</strong> {task.variables.reason}</p>
           <p><strong>Days Requested:</strong> {task.variables.days}</p>
           <p><strong>Submitted:</strong> {formatDate(task.timestamp)}</p>
+          <p><strong>Step:</strong> {task.role || 'Review'}</p>
           
           <div className="task-actions">
             <button 
               className="button-approve"
-              onClick={() => handleDecision(task.jobKey, true)}
+              onClick={() => handleDecision(task.jobKey, true, task.role)}
             >
               Approve
             </button>
             <button 
               className="button-reject"
-              onClick={() => handleDecision(task.jobKey, false)}
+              onClick={() => handleDecision(task.jobKey, false, task.role)}
             >
               Reject
             </button>

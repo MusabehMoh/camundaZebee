@@ -37,6 +37,43 @@ zbc.createWorker({
   timeout: 300000 
 });
 
+// Create workers for the two approval stages
+// Manager Approval Worker
+zbc.createWorker({
+  taskType: 'manual-review-manager',
+  taskHandler: async (job) => {
+    console.log('Manager approval task received:', job.key);
+    if (!pendingTasks.find(task => task.jobKey === job.key)) {
+      pendingTasks.push({
+        jobKey: job.key,
+        variables: job.variables,
+        role: 'manager',
+        timestamp: new Date()
+      });
+    }
+  },
+  timeout: 300000,
+  loglevel: 'INFO'
+});
+
+// HR Approval Worker
+zbc.createWorker({
+  taskType: 'manual-review-hr',
+  taskHandler: async (job) => {
+    console.log('HR approval task received:', job.key);
+    if (!pendingTasks.find(task => task.jobKey === job.key)) {
+      pendingTasks.push({
+        jobKey: job.key,
+        variables: job.variables,
+        role: 'hr',
+        timestamp: new Date()
+      });
+    }
+  },
+  timeout: 300000,
+  loglevel: 'INFO'
+});
+
 // API endpoint to get all pending tasks
 app.get('/api/tasks', (req, res) => {
   res.json(pendingTasks);
@@ -44,21 +81,29 @@ app.get('/api/tasks', (req, res) => {
 
 // API endpoint to complete a task with approval or rejection
 app.post('/api/complete', async (req, res) => {
-  const { jobKey, approved } = req.body;
+  const { jobKey, approved, role } = req.body;
   
   try {
-    // Complete the job with the approval status
+    // Determine which variable to set based on the role
+    const variableName = role === 'manager' ? 'approvedByManager' : 'approvedByHR';
+    
+    // Complete the job with the appropriate approval variable
     await zbc.completeJob({
       jobKey,
-      variables: { approved }
+      variables: {
+        [variableName]: approved
+      }
     });
     
     // Remove the job from our pending tasks
     pendingTasks = pendingTasks.filter(task => task.jobKey !== jobKey);
     
-    res.status(200).json({ success: true, message: 'Task completed successfully' });
+    res.status(200).json({ 
+      success: true, 
+      message: `Task completed by ${role || 'reviewer'} successfully` 
+    });
   } catch (error) {
-    console.error('Error completing job:', error);
+    console.error(`Error completing job for ${role || 'reviewer'}:`, error);
     res.status(500).json({ success: false, message: 'Failed to complete task' });
   }
 });
@@ -69,7 +114,7 @@ app.post('/api/start-process', async (req, res) => {
     const { reason, days, requester } = req.body; // Added requester here
     
     const result = await zbc.createProcessInstance({
-      bpmnProcessId: 'LeaveApproval',
+      bpmnProcessId: 'LeaveApprovalProcess',
       variables: {
         reason,
         days,
@@ -89,7 +134,7 @@ app.post('/api/start-process', async (req, res) => {
 });
 
 // Start the server
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3002;
 app.listen(PORT, () => {
   console.log(`Backend running on http://localhost:${PORT}`);
   console.log('Connecting to Zeebe at localhost:26500');
