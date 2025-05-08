@@ -6,7 +6,7 @@ const TaskList = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null);
-  const [currentRole, setCurrentRole] = useState('all'); // 'all', 'manager', or 'hr'
+  const [currentRole, setCurrentRole] = useState(''); // Empty string by default
   const [currentUser, setCurrentUser] = useState('');
 
   // Mock user accounts
@@ -20,6 +20,14 @@ const TaskList = () => {
   const fetchTasks = async () => {
     try {
       setLoading(true);
+      
+      // If no role is selected, don't fetch tasks
+      if (!currentRole) {
+        setTasks([]);
+        setLoading(false);
+        return;
+      }
+      
       const response = await axios.get('http://localhost:3002/api/tasks');
       
       // If a specific role is selected, filter tasks
@@ -88,7 +96,7 @@ const TaskList = () => {
   // Handle user login selection
   const handleUserLogin = (email) => {
     if (email === '') {
-      setCurrentRole('all');
+      setCurrentRole('');
       setCurrentUser('');
     } else {
       const user = mockUsers[email];
@@ -131,11 +139,13 @@ const TaskList = () => {
       </div>
 
       <h2>
-        {currentRole === 'all' 
-          ? 'All Pending Tasks' 
-          : currentRole === 'manager' 
-            ? 'Manager Approval Tasks' 
-            : 'HR Approval Tasks'
+        {!currentRole 
+          ? 'Select a User to View Tasks' 
+          : currentRole === 'all' 
+            ? 'All Pending Tasks' 
+            : currentRole === 'manager' 
+              ? 'Manager Approval Tasks' 
+              : 'HR Approval Tasks'
         }
       </h2>
       
@@ -149,7 +159,24 @@ const TaskList = () => {
       
       {error && <div className="error-message">{error}</div>}
       
-      {!loading && !error && tasks.length === 0 && (
+      {!currentRole && !loading && !error && (
+        <div style={{ 
+          padding: '20px', 
+          backgroundColor: '#fafafa', 
+          borderRadius: '5px',
+          textAlign: 'center',
+          marginTop: '20px'
+        }}>
+          <p style={{ fontSize: '16px' }}>Please select a user from the dropdown above to view relevant tasks.</p>
+          <p style={{ color: '#888' }}>
+            Manager users can only approve manager tasks<br/>
+            HR users can only approve HR tasks<br/>
+            Admin users can view and approve all tasks
+          </p>
+        </div>
+      )}
+      
+      {currentRole && !loading && !error && tasks.length === 0 && (
         <p>No pending tasks found for {currentRole === 'all' ? 'any role' : `${currentRole} role`}. Check back later.</p>
       )}
       
