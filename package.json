@@ -1,0 +1,18 @@
+{
+  "name": "camunda-leave-approval-backend",
+  "version": "1.0.0",
+  "description": "Backend for Camunda leave approval process",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "start:front": "cd frontend && npm start",
+    "dev": "concurrently \"npm start\" \"npm run start:front\""
+  },
+  "dependencies": {
+    "concurrently": "^8.2.2",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "nodemailer": "^6.9.7",
+    "zeebe-node": "^8.2.5"
+  }
+}
