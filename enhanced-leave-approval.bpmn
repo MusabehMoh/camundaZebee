@@ -1,0 +1,372 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:modeler="http://camunda.org/schema/modeler/1.0"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_Enhanced"
+                  targetNamespace="http://bpmn.io/schema/bpmn"
+                  exporter="Camunda Web Modeler"
+                  exporterVersion="d45327c"
+                  modeler:executionPlatform="Camunda Cloud"
+                  modeler:executionPlatformVersion="8.7.0">
+
+  <bpmn:process id="EnhancedLeaveApprovalProcess" isExecutable="true">
+    <!-- Start Event -->
+    <bpmn:startEvent id="StartEvent" name="Leave Request Submitted">
+      <bpmn:outgoing>flow_to_validation</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <!-- Auto Validation -->
+    <bpmn:serviceTask id="ValidateRequest" name="Validate Request">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="validate-leave-request" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>flow_to_validation</bpmn:incoming>
+      <bpmn:outgoing>flow_validation_to_decision</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <!-- Validation Decision Gateway -->
+    <bpmn:exclusiveGateway id="ValidationDecision" name="Valid Request?">
+      <bpmn:incoming>flow_validation_to_decision</bpmn:incoming>
+      <bpmn:outgoing>flow_to_auto_approve</bpmn:outgoing>
+      <bpmn:outgoing>flow_to_manager</bpmn:outgoing>
+      <bpmn:outgoing>flow_to_reject_invalid</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <!-- Auto Approval for Short Leaves -->
+    <bpmn:serviceTask id="AutoApprove" name="Auto Approve">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="auto-approve" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>flow_to_auto_approve</bpmn:incoming>
+      <bpmn:outgoing>flow_auto_to_notify</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <!-- Manager Approval -->
+    <bpmn:serviceTask id="ManagerApproval" name="Manager Approval">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="manager-approval" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>flow_to_manager</bpmn:incoming>
+      <bpmn:outgoing>flow_manager_to_decision</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <!-- Manager Decision Gateway -->
+    <bpmn:exclusiveGateway id="ManagerDecision" name="Manager Decision">
+      <bpmn:incoming>flow_manager_to_decision</bpmn:incoming>
+      <bpmn:outgoing>flow_to_hr</bpmn:outgoing>
+      <bpmn:outgoing>flow_to_rejected_by_manager</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <!-- HR Approval -->
+    <bpmn:serviceTask id="HRApproval" name="HR Approval">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="hr-approval" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>flow_to_hr</bpmn:incoming>
+      <bpmn:outgoing>flow_hr_to_decision</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <!-- HR Decision Gateway -->
+    <bpmn:exclusiveGateway id="HRDecision" name="HR Decision">
+      <bpmn:incoming>flow_hr_to_decision</bpmn:incoming>
+      <bpmn:outgoing>flow_to_approved</bpmn:outgoing>
+      <bpmn:outgoing>flow_to_rejected_by_hr</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <!-- Calendar Integration -->
+    <bpmn:serviceTask id="UpdateCalendar" name="Update Calendar">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="update-calendar" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>flow_to_approved</bpmn:incoming>
+      <bpmn:incoming>flow_auto_to_notify</bpmn:incoming>
+      <bpmn:outgoing>flow_calendar_to_notify</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <!-- Notification Service -->
+    <bpmn:serviceTask id="SendNotification" name="Send Notifications">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="send-notification" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>flow_calendar_to_notify</bpmn:incoming>
+      <bpmn:incoming>flow_to_rejected_by_manager</bpmn:incoming>
+      <bpmn:incoming>flow_to_rejected_by_hr</bpmn:incoming>
+      <bpmn:incoming>flow_to_reject_invalid</bpmn:incoming>
+      <bpmn:outgoing>flow_to_end</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <!-- End Events -->
+    <bpmn:endEvent id="EndApproved" name="Request Approved">
+      <bpmn:incoming>flow_to_end</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <!-- Sequence Flows -->
+    <bpmn:sequenceFlow id="flow_to_validation" sourceRef="StartEvent" targetRef="ValidateRequest" />
+    <bpmn:sequenceFlow id="flow_validation_to_decision" sourceRef="ValidateRequest" targetRef="ValidationDecision" />
+    
+    <!-- Auto approval for leaves <= 3 days -->
+    <bpmn:sequenceFlow id="flow_to_auto_approve" sourceRef="ValidationDecision" targetRef="AutoApprove">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">
+        = isValid and days &lt;= 3 and leaveType = "personal"
+      </bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    
+    <!-- Manager approval for other valid requests -->
+    <bpmn:sequenceFlow id="flow_to_manager" sourceRef="ValidationDecision" targetRef="ManagerApproval">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">
+        = isValid and (days &gt; 3 or leaveType != "personal")
+      </bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    
+    <!-- Reject invalid requests -->
+    <bpmn:sequenceFlow id="flow_to_reject_invalid" sourceRef="ValidationDecision" targetRef="SendNotification">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">
+        = not(isValid)
+      </bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:sequenceFlow id="flow_auto_to_notify" sourceRef="AutoApprove" targetRef="UpdateCalendar" />
+    <bpmn:sequenceFlow id="flow_manager_to_decision" sourceRef="ManagerApproval" targetRef="ManagerDecision" />
+    
+    <!-- Manager approves - go to HR for long leaves -->
+    <bpmn:sequenceFlow id="flow_to_hr" sourceRef="ManagerDecision" targetRef="HRApproval">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">
+        = approvedByManager = true and (days &gt; 10 or leaveType in ["maternity", "paternity", "medical"])
+      </bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    
+    <!-- Manager rejects -->
+    <bpmn:sequenceFlow id="flow_to_rejected_by_manager" sourceRef="ManagerDecision" targetRef="SendNotification">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">
+        = approvedByManager = false
+      </bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <!-- Manager approves short/medium leaves - go directly to calendar -->
+    <bpmn:sequenceFlow id="flow_manager_direct_approve" sourceRef="ManagerDecision" targetRef="UpdateCalendar">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">
+        = approvedByManager = true and days &lt;= 10 and not(leaveType in ["maternity", "paternity", "medical"])
+      </bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:sequenceFlow id="flow_hr_to_decision" sourceRef="HRApproval" targetRef="HRDecision" />
+    
+    <!-- HR approves -->
+    <bpmn:sequenceFlow id="flow_to_approved" sourceRef="HRDecision" targetRef="UpdateCalendar">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">
+        = approvedByHR = true
+      </bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    
+    <!-- HR rejects -->
+    <bpmn:sequenceFlow id="flow_to_rejected_by_hr" sourceRef="HRDecision" targetRef="SendNotification">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">
+        = approvedByHR = false
+      </bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:sequenceFlow id="flow_calendar_to_notify" sourceRef="UpdateCalendar" targetRef="SendNotification" />
+    <bpmn:sequenceFlow id="flow_to_end" sourceRef="SendNotification" targetRef="EndApproved" />
+
+    <!-- Timer Events for Escalation -->
+    <bpmn:boundaryEvent id="ManagerTimeout" name="Manager Timeout" attachedToRef="ManagerApproval">
+      <bpmn:outgoing>flow_manager_escalation</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeDuration>PT48H</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+
+    <bpmn:serviceTask id="EscalateToHR" name="Escalate to HR">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="escalate-to-hr" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>flow_manager_escalation</bpmn:incoming>
+      <bpmn:outgoing>flow_escalation_to_hr</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:sequenceFlow id="flow_manager_escalation" sourceRef="ManagerTimeout" targetRef="EscalateToHR" />
+    <bpmn:sequenceFlow id="flow_escalation_to_hr" sourceRef="EscalateToHR" targetRef="HRApproval" />
+
+  </bpmn:process>
+
+  <!-- Visual Layout -->
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Enhanced">
+    <bpmndi:BPMNPlane id="BPMNPlane_Enhanced" bpmnElement="EnhancedLeaveApprovalProcess">
+      <!-- Start Event -->
+      <bpmndi:BPMNShape id="StartEvent_di" bpmnElement="StartEvent">
+        <dc:Bounds x="100" y="200" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+
+      <!-- Validate Request -->
+      <bpmndi:BPMNShape id="ValidateRequest_di" bpmnElement="ValidateRequest">
+        <dc:Bounds x="200" y="188" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+
+      <!-- Validation Decision -->
+      <bpmndi:BPMNShape id="ValidationDecision_di" bpmnElement="ValidationDecision">
+        <dc:Bounds x="350" y="193" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+
+      <!-- Auto Approve -->
+      <bpmndi:BPMNShape id="AutoApprove_di" bpmnElement="AutoApprove">
+        <dc:Bounds x="450" y="100" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+
+      <!-- Manager Approval -->
+      <bpmndi:BPMNShape id="ManagerApproval_di" bpmnElement="ManagerApproval">
+        <dc:Bounds x="450" y="250" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+
+      <!-- Manager Decision -->
+      <bpmndi:BPMNShape id="ManagerDecision_di" bpmnElement="ManagerDecision">
+        <dc:Bounds x="600" y="255" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+
+      <!-- HR Approval -->
+      <bpmndi:BPMNShape id="HRApproval_di" bpmnElement="HRApproval">
+        <dc:Bounds x="700" y="200" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+
+      <!-- HR Decision -->
+      <bpmndi:BPMNShape id="HRDecision_di" bpmnElement="HRDecision">
+        <dc:Bounds x="850" y="205" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+
+      <!-- Update Calendar -->
+      <bpmndi:BPMNShape id="UpdateCalendar_di" bpmnElement="UpdateCalendar">
+        <dc:Bounds x="950" y="150" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+
+      <!-- Send Notification -->
+      <bpmndi:BPMNShape id="SendNotification_di" bpmnElement="SendNotification">
+        <dc:Bounds x="1100" y="200" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+
+      <!-- End Event -->
+      <bpmndi:BPMNShape id="EndApproved_di" bpmnElement="EndApproved">
+        <dc:Bounds x="1250" y="212" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+
+      <!-- Escalation Task -->
+      <bpmndi:BPMNShape id="EscalateToHR_di" bpmnElement="EscalateToHR">
+        <dc:Bounds x="575" y="350" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+
+      <!-- Boundary Event -->
+      <bpmndi:BPMNShape id="ManagerTimeout_di" bpmnElement="ManagerTimeout">
+        <dc:Bounds x="532" y="292" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+
+      <!-- Sequence Flow Edges -->
+      <bpmndi:BPMNEdge id="flow_to_validation_di" bpmnElement="flow_to_validation">
+        <di:waypoint x="136" y="218"/>
+        <di:waypoint x="200" y="218"/>
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="flow_validation_to_decision_di" bpmnElement="flow_validation_to_decision">
+        <di:waypoint x="300" y="218"/>
+        <di:waypoint x="350" y="218"/>
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="flow_to_auto_approve_di" bpmnElement="flow_to_auto_approve">
+        <di:waypoint x="375" y="193"/>
+        <di:waypoint x="375" y="130"/>
+        <di:waypoint x="450" y="130"/>
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="flow_to_manager_di" bpmnElement="flow_to_manager">
+        <di:waypoint x="375" y="243"/>
+        <di:waypoint x="375" y="280"/>
+        <di:waypoint x="450" y="280"/>
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="flow_auto_to_notify_di" bpmnElement="flow_auto_to_notify">
+        <di:waypoint x="550" y="130"/>
+        <di:waypoint x="750" y="130"/>
+        <di:waypoint x="1000" y="150"/>
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="flow_manager_to_decision_di" bpmnElement="flow_manager_to_decision">
+        <di:waypoint x="550" y="280"/>
+        <di:waypoint x="600" y="280"/>
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="flow_to_hr_di" bpmnElement="flow_to_hr">
+        <di:waypoint x="625" y="255"/>
+        <di:waypoint x="625" y="230"/>
+        <di:waypoint x="700" y="230"/>
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="flow_hr_to_decision_di" bpmnElement="flow_hr_to_decision">
+        <di:waypoint x="800" y="230"/>
+        <di:waypoint x="850" y="230"/>
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="flow_to_approved_di" bpmnElement="flow_to_approved">
+        <di:waypoint x="875" y="205"/>
+        <di:waypoint x="875" y="180"/>
+        <di:waypoint x="950" y="180"/>
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="flow_calendar_to_notify_di" bpmnElement="flow_calendar_to_notify">
+        <di:waypoint x="1050" y="180"/>
+        <di:waypoint x="1075" y="180"/>
+        <di:waypoint x="1075" y="230"/>
+        <di:waypoint x="1100" y="230"/>
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="flow_to_end_di" bpmnElement="flow_to_end">
+        <di:waypoint x="1200" y="230"/>
+        <di:waypoint x="1250" y="230"/>
+      </bpmndi:BPMNEdge>
+
+      <!-- Escalation flows -->
+      <bpmndi:BPMNEdge id="flow_manager_escalation_di" bpmnElement="flow_manager_escalation">
+        <di:waypoint x="550" y="328"/>
+        <di:waypoint x="550" y="380"/>
+        <di:waypoint x="575" y="380"/>
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="flow_escalation_to_hr_di" bpmnElement="flow_escalation_to_hr">
+        <di:waypoint x="675" y="380"/>
+        <di:waypoint x="750" y="380"/>
+        <di:waypoint x="750" y="260"/>
+      </bpmndi:BPMNEdge>
+
+      <!-- Rejection flows -->
+      <bpmndi:BPMNEdge id="flow_to_rejected_by_manager_di" bpmnElement="flow_to_rejected_by_manager">
+        <di:waypoint x="625" y="305"/>
+        <di:waypoint x="625" y="340"/>
+        <di:waypoint x="1150" y="340"/>
+        <di:waypoint x="1150" y="260"/>
+      </bpmndi:BPMNEdge>
+
+      <!-- Manager direct approval (short/medium leaves) -->
+      <bpmndi:BPMNEdge id="flow_manager_direct_approve_di" bpmnElement="flow_manager_direct_approve">
+        <di:waypoint x="650" y="280"/>
+        <di:waypoint x="800" y="280"/>
+        <di:waypoint x="800" y="180"/>
+        <di:waypoint x="950" y="180"/>
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="flow_to_rejected_by_hr_di" bpmnElement="flow_to_rejected_by_hr">
+        <di:waypoint x="875" y="255"/>
+        <di:waypoint x="875" y="290"/>
+        <di:waypoint x="1150" y="290"/>
+        <di:waypoint x="1150" y="260"/>
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="flow_to_reject_invalid_di" bpmnElement="flow_to_reject_invalid">
+        <di:waypoint x="375" y="243"/>
+        <di:waypoint x="375" y="320"/>
+        <di:waypoint x="1150" y="320"/>
+        <di:waypoint x="1150" y="260"/>
+      </bpmndi:BPMNEdge>
+
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

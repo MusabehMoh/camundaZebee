@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:modeler="http://camunda.org/schema/modeler/1.0"
+                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_2"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+
+  <bpmn:process id="LeaveApprovalProcess" isExecutable="true">
+    <bpmn:startEvent id="StartEvent" name="Start">
+      <bpmn:outgoing>flow_start_to_manager</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:serviceTask id="ManagerApproval" name="Manager Approval" camunda:type="manual-review-manager">
+      <bpmn:incoming>flow_start_to_manager</bpmn:incoming>
+      <bpmn:outgoing>flow_manager_to_decision</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:exclusiveGateway id="ManagerDecision" name="Manager Decision">
+      <bpmn:incoming>flow_manager_to_decision</bpmn:incoming>
+      <bpmn:outgoing>flow_to_hr</bpmn:outgoing>
+      <bpmn:outgoing>flow_to_reject_from_manager</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:serviceTask id="HRApproval" name="HR Approval" camunda:type="manual-review-hr">
+      <bpmn:incoming>flow_to_hr</bpmn:incoming>
+      <bpmn:outgoing>flow_hr_to_decision</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:exclusiveGateway id="HRDecision" name="HR Decision">
+      <bpmn:incoming>flow_hr_to_decision</bpmn:incoming>
+      <bpmn:outgoing>flow_to_approved</bpmn:outgoing>
+      <bpmn:outgoing>flow_to_rejected</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:endEvent id="EndApproved" name="Approved">
+      <bpmn:incoming>flow_to_approved</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:endEvent id="EndRejected" name="Rejected">
+      <bpmn:incoming>flow_to_rejected</bpmn:incoming>
+      <bpmn:incoming>flow_to_reject_from_manager</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="flow_start_to_manager" sourceRef="StartEvent" targetRef="ManagerApproval"/>
+    <bpmn:sequenceFlow id="flow_manager_to_decision" sourceRef="ManagerApproval" targetRef="ManagerDecision"/>
+    <bpmn:sequenceFlow id="flow_to_hr" sourceRef="ManagerDecision" targetRef="HRApproval">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression"><![CDATA[approvedByManager == true]]></bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_to_reject_from_manager" sourceRef="ManagerDecision" targetRef="EndRejected">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression"><![CDATA[approvedByManager == false]]></bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_hr_to_decision" sourceRef="HRApproval" targetRef="HRDecision"/>
+    <bpmn:sequenceFlow id="flow_to_approved" sourceRef="HRDecision" targetRef="EndApproved">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression"><![CDATA[approvedByHR == true]]></bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow_to_rejected" sourceRef="HRDecision" targetRef="EndRejected">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression"><![CDATA[approvedByHR == false]]></bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+  </bpmn:process>
+</bpmn:definitions>
